@@ -3,41 +3,43 @@ upload and download course documents.
 
 ## Usage
 
-   carnap.py action [args]
+    carnap.py action [args]
 
 Actions:
 
-   ls: list all files on server 
-   ls 'regex': list files on the server matching 'regex'
-   get [files]: fetch files by name from the server
-   get 'regex' : fetch files matching regex
-   put [files]: upload [files] to server
-   open [files]: open [files] in browser
-   open 'regex': open files matching regex in browser
-   assn: open the Carnap assignment page in browser
-   manage: open the Carnap upload page in browser
-   course <number>: open the Carnap course page in browser
-   help: show this help
+    ls: list all files on server 
+    ls 'regex': list files on the server matching 'regex'
+    get [files]: fetch files by name from the server
+    get 'regex' : fetch files matching regex
+    put [files]: upload [files] to server
+    open [files]: open [files] in browser
+    open 'regex': open files matching regex in browser
+    assn: open the Carnap assignment page in browser
+    manage: open the Carnap upload page in browser
+    course <number>: open the Carnap course page in browser
+    help: show this help
 
-So, for example, assuming you have a file named `U12T` that you want to upload,
-   
-   carnap.py put U12T
+So, for example, assuming you have a file named `U12T` that you want to
+upload,
 
-should upload it. Then, if you want to open the file on Carnap, 
+    carnap.py put U12T
 
-   carnap.py open U12T
+should upload it. Then, if you want to open the file on Carnap,
+
+    carnap.py open U12T
 
 should open the file in your default web browser.
 
 To download all files with names beginning with 'U2':
 
-   carnap.py get '^U2.*'
+    carnap.py get '^U2.*'
 
 Or, to download all files,
 
-   carnap.py get '*'
+    carnap.py get '*'
 
-(Note that this script throttles its requests to 1 request per second. So if you have a lot of files uploaded, this may take a minute.)
+(Note that this script throttles its requests to 1 request per second. So if
+you have a lot of files uploaded, this may take a minute.)
 
 Many of the commands are just shortcuts for opening pages on the Carnap website.
 
