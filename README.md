@@ -1,5 +1,5 @@
 This is a quickly thrown together python script for using the Carnap API to
-upload and download course documents.
+manage a course.
 
 ## Usage
 
@@ -14,21 +14,60 @@ Actions:
     put [files]: upload [files] to server
     open [files]: open [files] in browser
     open 'regex': open files matching regex in browser
-    assn: open the Carnap assignment page in browser
+    assns: list all assignments on server
+    assn <opts> [files|regexes]: assign [files] to course
+      <opts>: -d [description]: set description
+            -p n: set total points to n
+    students: list students enrolled in course
     manage: open the Carnap upload page in browser
     course <number>: open the Carnap course page in browser
     help: show this help
 
 So, for example, assuming you have a file named `U12T` that you want to
-upload,
+upload it:
 
     carnap.py put U12T
 
-should upload it. Then, if you want to open the file on Carnap,
+If you want to view it in your browser:
 
     carnap.py open U12T
 
-should open the file in your default web browser.
+If you want to assign it:
+
+    carnap.py assn U12T
+
+If you want to add a description when assigning it:
+
+    carnap.py assn -d "Unit 12 Test" U12T
+
+You can also use the 'assn' command to modify existing assignments. For
+example, to add a total points value:
+
+    carnap.py assn -p 100 U12T
+
+And you can assign, or modify, more than one document at a time, with or
+without extra parameters:
+
+    carnap.py assn -p 100 -d "Unit 12 Test" U12T -p 50 -d "Unit 13 Test" U13T
+
+(I need to add support for other parameters. For now, the only two parameters
+supported are total points and description.)
+
+To get a list of all uploaded files:
+
+    carnap.py ls
+
+To get a list of all assignments:
+
+    carnap.py assns
+
+To get a list of all students:
+
+    carnap.py students
+
+To download a file:
+
+    carnap.py get U12T
 
 To download all files with names beginning with 'U2':
 
@@ -41,7 +80,6 @@ Or, to download all files,
 (Note that this script throttles its requests to 1 request per second. So if
 you have a lot of files uploaded, this may take a minute.)
 
-Many of the commands are just shortcuts for opening pages on the Carnap website.
 
 ## Installation
 
