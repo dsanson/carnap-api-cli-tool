@@ -9,7 +9,11 @@ Actions:
   get [files|regexes]: fetch [files] from server
   put [files]: upload [files] to server
   open [files|regexes]: open [files] on server in browser
-  assn: open the Carnap assignment page in browser
+  assns: list all assignments on server
+  assn <opts> [files|regexes]: assign [files] to course
+    <opts>: -d [description]: set description
+            -p n: set total points to n
+  students: list students enrolled in course
   manage: open the Carnap upload page in browser
   course <number>: open the Carnap course page in browser
   help: show this help
@@ -57,6 +61,7 @@ for f in [
     apikey = cfg['apikey']
     instructor = cfg['instructor']
     server = cfg['server']
+    coursetitle = cfg['coursetitle']
     config = True
 
 if config:
@@ -102,6 +107,40 @@ def upload_document(i,content):
   rq('PUT', f'/instructors/{instructor}/documents/{i}/data', 
       data=content.encode('utf-8'))
 
+def assign_document(doc_id,filename,description,totalpoints):
+  params = {
+      "document": doc_id,
+      "title": filename,
+  }
+  if description:
+    params['description'] = description
+  if totalpoints:
+    params['pointValue'] = totalpoints
+
+  return rq('POST', 
+            f'/instructors/{instructor}/courses/{coursetitle}/assignments',
+            json=params
+         ).json()
+
+def patch_assignment(assn_id,filename,description,totalpoints):
+  params = { "title": filename }
+  if description:
+    params['description'] = description
+  if totalpoints:
+    params['pointValue'] = totalpoints
+
+  return rq('PATCH', 
+            f'/instructors/{instructor}/courses/{coursetitle}/assignments/{assn_id}',
+            json=params
+         ).json()
+
+
+def get_assignments():
+  return rq('GET', f'/instructors/{instructor}/courses/{coursetitle}/assignments').json()
+
+def get_students():
+  return rq('GET', f'/instructors/{instructor}/courses/{coursetitle}/students').json()
+
 # Helper functions
 
 def throttle(first):
@@ -116,6 +155,13 @@ def get_file_id(docs,f):
       i = item['id']
   return i
 
+def get_assn_id(assns,f):
+  i = None
+  for assn in assns:
+    if assn['title'] == f:
+      i = assn['id']
+  return i
+
 # Actions
 
 def list_documents(docs, args):
@@ -126,7 +172,22 @@ def list_documents(docs, args):
   for item in docs:
     if not filter or re.match(args[0], item['filename']):
       print(f"{item['id']}: {item['filename']}")
-        
+
+def list_assignments(assns):
+    for assn in assns:
+        title = assn["title"]
+        points = assn["pointValue"]
+        description = assn["description"]
+        if not points:
+          points = ""
+        if not description:
+          description = "" 
+
+        print(f'{title},{points},{description}')
+
+def list_students(students):
+    for student in students:
+        print(f'{student["lastName"]},{student["firstName"]},{student["universityId"]},{student["email"]}')
 
 def get_documents(docs, args):
   if len(args) == 0: 
@@ -180,6 +241,47 @@ def put_documents(docs, args):
       else:
         print(f'Skipping {arg}')
 
+def assn_document(assns,doc_id,filename,description,totalpoints):
+  assn_id = get_assn_id(assns,filename)  
+  if assn_id:
+    patch_assignment(assn_id,filename,description,totalpoints)
+  else:
+    assign_document(doc_id,filename,description,totalpoints)
+
+def assn_documents(docs, assns, args):
+  if len(args) == 0:
+    print_help()
+
+  while len(args) != 0:
+    
+    desc = None
+    tot = None
+
+    if args[0] in {'-d', '--description'}:
+      if len(args) < 2:
+        print_help()
+      desc = args[1]
+      args = args[2:]
+
+    if args[0] in {'-p', '--points'}:
+      if len(args) < 2:
+        print_help()
+      tot = int(args[1])
+      args = args[2:]
+
+    if len(args) == 0:
+      print_help()
+
+    f = args[0]
+    i = get_file_id(docs,f)
+
+    if i is None:
+      print(f'{f} not found on server')
+    else:
+      assn_document(assns,i,f,desc,tot)
+    args = args[1:0]
+
+
 def open_documents(docs, args):
   if len(args) == 0:
     print_help()
@@ -212,10 +314,7 @@ def main(args=sys.argv):
   
   # commands that don't require server metadata
 
-  if args[0] in {'assn'}:
-    webbrowser.open(f'{server}/instructor/{instructor}#assignFromDocument')
-    raise SystemExit
-  elif args[0] in {'manage'}:
+  if args[0] in {'manage'}:
     webbrowser.open(f'{server}/instructor/{instructor}#uploadDocument')
     raise SystemExit
   elif args[0] in {'course'}:
@@ -239,6 +338,23 @@ def main(args=sys.argv):
   elif args[0] in {'open'}:
     args = args[1:]
     open_documents(docs, args)
+
+  # commands that require assignment metadata too
+
+  assns = get_assignments()
+
+  if args[0] in {'assns'}:
+    list_assignments(assns)
+  elif args[0] in {'assn'}:
+    args = args[1:]
+    assn_documents(docs, assns, args)
+
+  # commands that require student data too
+
+  students = get_students()
+
+  if args[0] in {'students'}:
+    list_students(students)
 
 if __name__ == '__main__':
   #logging.basicConfig(filename='carnap.py.log',level=logging.DEBUG)
