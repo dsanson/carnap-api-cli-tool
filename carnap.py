@@ -31,12 +31,14 @@ import webbrowser
 dummy_apikey = '<apikey>'
 dummy_instructor = 'rudolf@example.com'
 default_server = 'http://localhost:3000'
+default_course = '<course title>'
 
 config_template=f'''\
 ---
 apikey: {dummy_apikey}
 instructor: {dummy_instructor}
 server: {default_server}
+coursetitle: {default_course}
 ...'''
 
 home = Path.home()
@@ -160,13 +162,14 @@ def put_documents(docs, args):
         first = throttle(first)
         i = create_remote_file(arg)
         overwrite = True
-      else:
-        print(f'{arg} already exists on server.')
-        print('Overwrite? [y/n]')
-        reply = readchar.readchar()
-        if reply in {'y', 'Y'}:
-          overwrite = True
+      # else:
+      #   print(f'{arg} already exists on server.')
+      #   print('Overwrite? [y/n]')
+      #   reply = readchar.readchar()
+      #   if reply in {'y', 'Y'}:
+      #     overwrite = True
 
+      overwrite = True
       if overwrite:
         file = open(arg,'r')
         content = file.read()
