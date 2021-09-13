@@ -50,6 +50,9 @@ without extra parameters:
 
     carnap.py assn -p 100 -d "Unit 12 Test" U12T -p 50 -d "Unit 13 Test" U13T
 
+Note that the optional parameters must come *before* the assignment they are
+mean to modify, and apply *only* to that one assignment.
+
 (I need to add support for other parameters. For now, the only two parameters
 supported are total points and description.)
 
