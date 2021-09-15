@@ -1,31 +1,54 @@
 #!/usr/bin/env python3
 """\
 Usage:
-  carnap.py action [args]
+
+    carnap.py action [args]
 
 Actions:
-  ls: list all files on server 
-  ls <regex>: with filenames matching [regex]
-  get [files|regexes]: fetch [files] from server
-  put [files]: upload [files] to server
-  open [files|regexes]: open [files] on server in browser
-  assns: list all assignments on server
-  assn <opts> [files|regexes]: assign [files] to course
-    <opts>: -d [description]: set description
-            -p n: set total points to n
-  students: list students enrolled in course
-  manage: open the Carnap upload page in browser
-  course <number>: open the Carnap course page in browser
-  help: show this help
+
+    ls: list all documents on server
+    ls [filename] <[filename]...>: list documents on server with specified [filenames]
+    ls ['regex']: list documents on the server with filenames matching 'regex'
+
+    put [files]: upload [files] to server
+
+    get [files]: fetch files from the server by filename
+    get ['regex']: fetch files from server with filenames that match regex
+
+    open [files]: open [files] in browser
+    open 'regex': open files matching regex in browser
+
+    assns: list all assignments on server
+
+    assn <localopts> [file] <opts> [file] ...: assign each [file] to course with opts
+       -d [description]: set description
+       -t [n]: set total points to n
+       -p [password]: set a password and hide the assignment
+
+    assn <GLOBALOPTS> [files]
+       -D [description]: set description to [description] for all [files] 
+       -T [n]: set total points to [n] for all [files] 
+       -P [password]: set password to [password] for all [files], and hide
+          assignment 
+
+    hiddens: list URL and access key for all hidden assignments
+
+    students: list students enrolled in course
+
+    manage: open your Carnap instructor page in browser
+    manage assns: open the assignments page 
+    manage docs: open the documents page
+    manage courses: open the courses page
+    manage course: open the course page
+
+    help: show this help
 """
 
 import requests
-import logging
 import sys
 import re
 import os.path
 import time
-import readchar
 from pathlib import Path
 import yaml
 import webbrowser
@@ -107,39 +130,33 @@ def upload_document(i,content):
   rq('PUT', f'/instructors/{instructor}/documents/{i}/data', 
       data=content.encode('utf-8'))
 
-def assign_document(doc_id,filename,description,totalpoints):
-  params = {
-      "document": doc_id,
-      "title": filename,
-  }
-  if description:
-    params['description'] = description
-  if totalpoints:
-    params['pointValue'] = totalpoints
-
+def assign_document(params):
   return rq('POST', 
             f'/instructors/{instructor}/courses/{coursetitle}/assignments',
             json=params
          ).json()
 
-def patch_assignment(assn_id,filename,description,totalpoints):
-  params = { "title": filename }
-  if description:
-    params['description'] = description
-  if totalpoints:
-    params['pointValue'] = totalpoints
-
+def patch_assignment(assn_id,params):
   return rq('PATCH', 
             f'/instructors/{instructor}/courses/{coursetitle}/assignments/{assn_id}',
             json=params
          ).json()
-
 
 def get_assignments():
   return rq('GET', f'/instructors/{instructor}/courses/{coursetitle}/assignments').json()
 
 def get_students():
   return rq('GET', f'/instructors/{instructor}/courses/{coursetitle}/students').json()
+
+def fetch_scores(student_id):
+  return rq('GET', 
+            f'/instructors/{instructor}/courses/{coursetitle}/students/{student_id}/submissions'
+         ).json()
+
+def fetch_accesses(student_id):
+  return rq('GET',
+            f'/instructors/{instructor}/courses/{coursetitle}/students/{student_id}/assignmentTokens'
+         ).json()
 
 # Helper functions
 
@@ -162,32 +179,101 @@ def get_assn_id(assns,f):
       i = assn['id']
   return i
 
+def get_assn_by_title(assns,f):
+  a = None
+  for assn in assns:
+    if assn['title'] == f:
+      a = assn
+  return a
+
+def get_assn_title(assns,id):
+  title = None
+  for assn in assns:
+    if assn['id'] == id:
+      title = assn['title']
+  return title
+
+def get_student_ids(students,query):
+  results = []
+  for student in students:
+    if student['universityId'] and re.match(query, student['universityId']):
+      results.append(student['id'])
+
+  return results
+
+
 # Actions
 
 def list_documents(docs, args):
   filter = True
   if len(args) == 0:
     filter = False
-
-  for item in docs:
-    if not filter or re.match(args[0], item['filename']):
-      print(f"{item['id']}: {item['filename']}")
+  
+  for arg in args:
+      for item in docs:
+        if not filter or re.match(arg, item['filename']):
+          print(f"{item['id']}: {item['filename']}")
 
 def list_assignments(assns):
     for assn in assns:
         title = assn["title"]
         points = assn["pointValue"]
         description = assn["description"]
+        availability = assn["availability"]
         if not points:
           points = ""
         if not description:
           description = "" 
+        if availability:
+          password = availability['contents']
+        else:
+          password = ""
 
-        print(f'{title},{points},{description}')
+        print(f'{title},{points},{password},{description}')
+
+def list_hiddens(assns):
+  for assn in assns:
+    availability = assn["availability"]
+    if availability:
+      password = availability['contents']
+      file = assn['title']
+      url = f'https://carnap.io/assignments/{coursetitle}/{file}' 
+      print(f'{url} access key: {password}')
+
+def list_attempts(students,assns,args):
+  for student in args:
+
+    student_id = get_student_ids(students,student)
+    accesses = fetch_accesses(student_id)
+    for access in accesses:
+      title = get_assn_title(assns,access['assignment'])
+      print(f'{title}: {access["createdAt"]}')
 
 def list_students(students):
     for student in students:
-        print(f'{student["lastName"]},{student["firstName"]},{student["universityId"]},{student["email"]}')
+        print(f'{student["lastName"]},{student["firstName"]},{student["universityId"]},{student["email"]},{student["id"]}')
+
+def get_scores(students,assns,args):
+  if len(args) == 0:
+    print_help()
+ 
+  student_ids = []
+
+  for query in args:
+    student_ids = get_student_ids(students,query)
+  
+  for id in student_ids:
+    scores = fetch_scores(id)
+    print_scores(assns,id,scores)
+
+def print_scores(assns,id,scores):
+  for item in scores: 
+    assn_id = item['problemSubmissionAssignmentId']
+    score = item['problemSubmissionCredit']
+    prob_id = item['problemSubmissionIdent']
+    late = item['problemSubmissionLateCredit']
+    time = item['problemSubmissionTime']
+    print (assn_id,prob_id,score,late,time)
 
 def get_documents(docs, args):
   if len(args) == 0: 
@@ -241,45 +327,95 @@ def put_documents(docs, args):
       else:
         print(f'Skipping {arg}')
 
-def assn_document(assns,doc_id,filename,description,totalpoints):
-  assn_id = get_assn_id(assns,filename)  
-  if assn_id:
-    patch_assignment(assn_id,filename,description,totalpoints)
-  else:
-    assign_document(doc_id,filename,description,totalpoints)
 
 def assn_documents(docs, assns, args):
-  if len(args) == 0:
-    print_help()
+
+  # Use capital letter options to apply to all assignments
+
+  description = None
+  points = None
+  availability = None
+
+  while True:
+    if len(args) == 0:
+      print_help()
+
+    elif args[0] in {'-D', '--Description'}:
+      if len(args) < 2:
+        print_help()
+      description = args[1]
+      args = args[2:]
+
+    elif args[0] in {'-T', '--Points'}:
+      if len(args) < 2:
+        print_help()
+      points = int(args[1])
+      args = args[2:]
+
+    elif args[0] in {'-P', '--Password'}:
+      if len(args) < 2:
+        print_help()
+      availability = {
+        'tag': "HiddenViaPassword",
+        'contents': str(args[1])
+      }
+      args = args[2:]
+    else:
+      break
 
   while len(args) != 0:
-    
-    desc = None
-    tot = None
+   
+    params = {
+      "document": None,
+      "title": None,
+      "description": description,
+      "pointValue": points,
+      "availability": availability, 
+    }
 
     if args[0] in {'-d', '--description'}:
       if len(args) < 2:
         print_help()
-      desc = args[1]
+      params['description'] = args[1]
       args = args[2:]
 
-    if args[0] in {'-p', '--points'}:
+    if args[0] in {'-t', '--points'}:
       if len(args) < 2:
         print_help()
-      tot = int(args[1])
+      params['pointValue'] = int(args[1])
+      args = args[2:]
+
+    if args[0] in {'-p', '--password'}:
+      if len(args) < 2:
+        print_help()
+      params['availability'] = {
+        'tag': "HiddenViaPassword",
+        'contents': str(args[1])
+      }
       args = args[2:]
 
     if len(args) == 0:
       print_help()
 
-    f = args[0]
-    i = get_file_id(docs,f)
-
-    if i is None:
-      print(f'{f} not found on server')
+    params['title'] = args[0]
+    params['document'] = get_file_id(docs,args[0])
+    if params['document'] is None:
+      print(f'{params["title"]} not found on server')
     else:
-      assn_document(assns,i,f,desc,tot)
-    args = args[1:0]
+      assn = get_assn_by_title(assns,params['title'])
+      if assn['id']:
+        if not params['description']:
+          params['description'] = assn['description']
+        if params['pointValue'] is None:
+          params['pointValue'] = assn['pointValue']
+        if not params['availability']:
+          params['availability'] = assn['availability']
+        patch_assignment(assn['id'],params)
+      else:
+        print(params)
+        assign_document(params)
+
+    args = args[1:]
 
 
 def open_documents(docs, args):
@@ -293,13 +429,6 @@ def open_documents(docs, args):
     else:
       url = f'{server}/shared/{instructor}/{arg}'
       webbrowser.open(url)
-
-def open_course_page(args):
-  if len(args) == 0:
-    course = 1
-  else:
-    course = args[0]
-  webbrowser.open(f'{server}/instructor/{instructor}#course-{course}')
 
 def print_help():
   print(__doc__.rstrip())
@@ -315,11 +444,18 @@ def main(args=sys.argv):
   # commands that don't require server metadata
 
   if args[0] in {'manage'}:
-    webbrowser.open(f'{server}/instructor/{instructor}#uploadDocument')
-    raise SystemExit
-  elif args[0] in {'course'}:
-    args = args[1:]
-    open_course_page(args)
+    if len(args) == 1:
+      webbrowser.open(f'{server}/instructor/{instructor}')
+    elif args[1] == 'assns':
+      webbrowser.open(f'{server}/instructor/{instructor}#assignFromDocument')
+    elif args[1] == 'docs':
+      webbrowser.open(f'{server}/instructor/{instructor}#uploadDocument')
+    elif args[1] == 'course':
+      webbrowser.open(f'{server}/instructor/{instructor}#course-1')
+    elif args[1] == 'courses':
+      webbrowser.open(f'{server}/instructor/{instructor}#manageCourse')
+    else:
+      print_help()
     raise SystemExit
 
   # commands that require server metadata
@@ -329,15 +465,19 @@ def main(args=sys.argv):
   if args[0] in {'ls', 'list'}:
     args = args[1:]
     list_documents(docs, args)
+    raise SystemExit
   elif args[0] in {'get', 'fetch'}:
     args = args[1:]
     get_documents(docs, args)
+    raise SystemExit
   elif args[0] in {'put', 'push'}:
     args = args[1:]
     put_documents(docs, args)
+    raise SystemExit
   elif args[0] in {'open'}:
     args = args[1:]
     open_documents(docs, args)
+    raise SystemExit
 
   # commands that require assignment metadata too
 
@@ -345,9 +485,14 @@ def main(args=sys.argv):
 
   if args[0] in {'assns'}:
     list_assignments(assns)
+    raise SystemExit
   elif args[0] in {'assn'}:
     args = args[1:]
     assn_documents(docs, assns, args)
+    raise SystemExit
+  elif args[0] in {'hiddens'}:
+    list_hiddens(assns)
+    raise SystemExit
 
   # commands that require student data too
 
@@ -355,6 +500,17 @@ def main(args=sys.argv):
 
   if args[0] in {'students'}:
     list_students(students)
+    raise SystemExit
+  elif args[0] in {'scores'}:
+    args = args[1:]
+    get_scores(students,assns,args)
+    raise SystemExit
+  elif args[0] in {'attempts'}:
+    args = args[1:]
+    list_attempts(students,assns,args)
+    raise SystemExit
+
+  print_help()
 
 if __name__ == '__main__':
   #logging.basicConfig(filename='carnap.py.log',level=logging.DEBUG)
