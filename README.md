@@ -3,6 +3,8 @@ manage a course.
 
 ## Usage
 
+Usage:
+
     carnap.py action [args]
 
 Actions:
@@ -48,120 +50,154 @@ Actions:
 
 ### `ls`
 
+The `ls` command is used to list documents on the Carnap server:
+
     carnap.py ls
 
-Returns a list of documents, showing filename and document id. Note that,
+Returns a list of documents, showing both filename and document id. Optionally, you
+can supply a list of filenames, and it will restrict the list to those files:
 
-    carnap.py ls Exercise*
+    carnap.py ls 01R 01E
 
-will use shell globbing to expand out to include the filenames of all
-exercises in your local directory.
+Or you can supply a regular expression, and it will restrict the list to files
+that match the regular expression:
 
-    carnap.py ls 'Exercise.*'
+    carnap.py ls '01.*'
 
-Use will list filenames on Carnap that match the regex.
+Note that you must put the regular expression in quotes to avoid shell
+globbing.
 
 ### `put` and `get`
 
-    carnap.py put Exam1 Exam2 Exam3
+The `put` and `get` commands are used to upload and download documents from
+the Carnap server:
 
-This will upload the specified documents to Carnap. If a document with that
-filename already exists, this will overwrite it.
+    carnap.py put 01R
 
-    carnap.py get Exam1 Exam2 Exam3
+This will upload the local file named `01R` to Carnap. If a document named
+`01R` already exists on the Carnap server, this will overwrite that document.
 
-This will download the specified documents from Carnap. If a document already
-exists locally, this will overwrite it. You can also use a
-regex. For example, this will fetch all of your documents from the server:
+    carnap.py get 01R
 
+This will download the file named `01R` from Carnap. If a document named `01R` already
+exists locally, this will overwrite it. 
+
+`put` and `get` be supplied a list of files. And `get` can also take a regular
+expression:
+
+    carnap.py put 01R 01E
+    carnap.py put 01*
+
+That second example will use shell globbing to upload all local files
+beginning with `01`.
+
+    carnap.py get 01R 01E
+    carnap.py get '01.*'
     carnap.py get '.*'
 
-(Note that the script throttles put and get requests to 1 request per second. So if
-you have a lot of files uploaded, this may take a minute.)
+Note once again that you need to put any regular expression into quotes to
+avoid shell globbing.
 
 ### `open`
 
-    carnap.py open Exam1 Exam2
+The `open` command opens a document that is on Carnap's server in your
+browser:
 
-Opens Exam1 and Exam2 in your browser. Note that right now, this always opens
-the document page, not the assignment page. I need to add an action or option
-for opening the assignment page too.
+    carnap.py open 01R
+
+Note that it opens the "shared document" page, not the "assignment" page. The
+`open` command can also take a list of document names, or a regular
+expression.
 
 ### `assns`
 
+The `assns` command returns a list of all your course assignments.
+
     carnap.py assns
 
-Returns a list of all assignments. Right now, it is formatted as CSV, and
-shows title, total points, password (if any), and description. There is no
-built in filtering of results. You can use `grep` for that.
+Each assignment is listed as follows:
+
+    01R,80,,Chapter 1 Reading
+
+This is comma delimited: the first item, `01R`, is the name of the assignment.
+The second item is the total points. The third item is the access key, if any.
+The fourth is the assignment description.
 
 ### `assn`
 
+The `assn` command is used to create an assignments from documents already
+uploaded to Carnap.
 
-    carnap.py assn Exam1 Exam2
+    carnap.py assn 01R
 
-This creates assignments from the uploaded documents with the filenames
-'Exam1' and 'Exam2'. If no such documents exist, the command fails. The title
-of each assignment is set to the filename of the uploaded document.
+This creates an assignment from the document named `01R`. If no such document
+exists on Carnap's server, the command fails. So a simple workflow might be:
+
+    carnap.py put 01R
+    carnap.py assn 01R
 
 You can use options to specify additional assignment properties:
 
-    carnap.py -t 100 -d "First Exam" -p "password" Exam1
+    carnap.py -t 100 -d "First Exam" -p "password" 01E
 
-This creates an assignment from Exam1, sets the total points to 100, the
+This creates an assignment from `01E`, setting the total points to 100, the
 description to "First Exam", and the password to "password". Setting a
 password also sets the availability of the assignment to hidden.
 
+**Note**: specifying multiple options at the same time seems to be broken?
+Workaround:
+
+    carnap.py -t 100 01E
+    carnap.py -d "First Exam" 01E
+    carnap.py -p "password" 01E
+
 If an assignment already exists, `assn` can be used to edit its properties,
 
-    carnap.py -t 200 Exam1
+    carnap.py -t 200 01E
 
-`assn` takes local options and global options. Lowercase options are local,
+The `assn` command can be used to create several assignments at once:
+
+    carnap.py assn 01R 01E 01T
+
+When creating several assignments, options can be specified as "global" or
+"local". Lowercase options are local,
 and apply only to the assignment they immediately proceed. For example,
 
-    carnap.py assn -t 100 -d "Unit 12 Test" U12T -t 50 -d "Unit 13 Test" U13T
+    carnap.py assn -t 100 -d "Unit 12 Test" 12T -t 50 -d "Unit 13 Test" 13T
 
-Uppercase options are global: they apply to every assignment given. They must
-occur before anything else on the line. For example, this sets
-the total points to 100 for all three exams:
+Uppercase options are global, and apply to every assignment created. They must
+occur before anything else on the line:
 
-    carnap.py assn -T 100 Exam1 Exam2 Exam3
-
-This can be useful in conjunction with shell globbing. Suppose all the exams
-exist in your local directory, are named 'Exam1', 'Exam2', etc., and you want to upload and assign
-them all, setting their point values to 100:
-
-    carnap.py put Exam*
-    carnap.py assn -T 100 Exam*
+    carnap.py assn -T 100 Midterm1 Midterm2 Midterm3
 
 A global option can be locally overridden by a local option. For example, 
 
-    carnap.py assn -T 100 Exam1 -t 50 Exam2 Exam3
-
-This sets the total points to Exam1 and Exam3 to 100, but the total points for
-Exam2 to 50.
+    carnap.py assn -T 100 Midterm1 -t 50 Midterm2 Midterm3
 
 ### `hiddens`
 
+The `hiddens` command lists all assignments that are "hidden", in a format
+that allows for easy cutting and pasting, to share with students:
+
     carnap.py hiddens
 
-This will list all assignments that are hidden, in the format:
+    https://carnap.io/assignments/[course]/01T-makeup access key: mypass1
+    https://carnap.io/assignments/[course]/02T-makeup access key: mypass2
 
-    https://carnap.io/assignments/[course]/Exam1 access key: mypass1
-    https://carnap.io/assignments/[course]/Exam2 access key: mypass2
-
-This can be useful if you need to quickly give a student a link and password
-to a given hidden assignment.
+I offer my students lots of "retake" opportunities by creating alternate
+hidden versions of given assignments. When a student asks for a retake, I just
+run `carnap.py hiddens`, cut and paste the appropriate line, and send it to
+them.
 
 ### `students`
 
     carnap.py students
 
-This will give you a list of students enrolled, with some other information.
+This will give you a list of enrolled students, with some other information.
 
 ### `manage`
 
-These are just quick shortcuts for opening Carnap in your browser:
+These are just quick shortcuts for opening Carnap pages in your browser:
 
     carnap.py manage
     carnap.py manage assns
@@ -176,13 +212,20 @@ improved API for courses.
 
 ## Installation
 
-I believe that I've got all the requirements in requirements.txt, so you should be able to install any missing requirements with:
+Clone this repository, and cd into the directory:
+
+```
+git clone https://github.com/dsanson/carnap-api-cli-tool
+cd carnap-api-cli-tool
+```
+
+Use `pip` to install any dependencies:
 
 ```
 pip install -r requirements.txt
 ```
 
-Then just copy `carnap.py` to somewhere in your path.
+Then copy `carnap.py` to somewhere in your path.
 
 ## Configuration
 
@@ -204,6 +247,20 @@ server: 'http://localhost:3000'
 coursetitle: 'yourcoursetitle'
 ...
 ```
+
+So, for example, my config file looks like this:
+
+```{.yaml}
+---
+apikey: MY_API_KEY
+instructor: 'dsanson@...com'
+server:  'https://carnap.io'
+coursetitle: 'ISU_112_FALL_2021'
+...
+```
+
+You can find your API key at the bottom of the "Manage Uploaded Documents" tab
+on Carnap.
 
 If you try to run `carnap.py`, and it can't find a config file, it will
 create a template file at `~/.config/carnap.py/config` for you. But you will

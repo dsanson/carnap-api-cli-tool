@@ -120,15 +120,20 @@ def get_metadata():
 def get_file(id):
   return rq('GET', f'/instructors/{instructor}/documents/{id}/data').text
 
-def create_remote_file(filename):
+def create_remote_document(params):
   return rq('POST', f'/instructors/{instructor}/documents',
-      json={
-        "filename": filename,
-      }).json()
+         json=params
+      ).json()
 
 def upload_document(i,content):
   rq('PUT', f'/instructors/{instructor}/documents/{i}/data', 
       data=content.encode('utf-8'))
+
+def update_document(i,params):
+  return rq('PATCH', 
+            f'/instructors/{instructor}/documents/{i}',
+            json=params
+         ).json()
 
 def assign_document(params):
   return rq('POST', 
@@ -172,6 +177,13 @@ def get_file_id(docs,f):
       i = item['id']
   return i
 
+def get_doc_by_id(docs,id):
+  d = None
+  for doc in docs:
+    if doc['id'] == id:
+      d = doc
+  return d
+
 def get_assn_id(assns,f):
   i = None
   for assn in assns:
@@ -205,14 +217,14 @@ def get_student_ids(students,query):
 # Actions
 
 def list_documents(docs, args):
-  filter = True
   if len(args) == 0:
-    filter = False
-  
-  for arg in args:
-      for item in docs:
-        if not filter or re.match(arg, item['filename']):
-          print(f"{item['id']}: {item['filename']}")
+    for item in docs:
+        print(f"{item['id']}: {item['filename']}")
+  else:
+    for arg in args:
+        for item in docs:
+          if re.match(arg, item['filename']):
+            print(f"{item['id']}: {item['filename']}")
 
 def list_assignments(assns):
     for assn in assns:
@@ -307,7 +319,10 @@ def put_documents(docs, args):
       overwrite = False
       if i is None:
         first = throttle(first)
-        i = create_remote_file(arg)
+        params = {
+          "filename": arg,
+        }
+        i = create_remote_document(params)
         overwrite = True
       # else:
       #   print(f'{arg} already exists on server.')
@@ -326,6 +341,89 @@ def put_documents(docs, args):
         upload_document(i,content)
       else:
         print(f'Skipping {arg}')
+
+def put_documents_new(docs, args):
+
+  # Use capital letter options to apply to all documents
+  filename = None
+  scope = None
+  description = None
+
+  while True:
+    if len(args) == 0:
+      print_help()
+
+    elif args[0] in {'-D', '--Description'}:
+      if len(args) < 2:
+        print_help()
+      description = args[1]
+      args = args[2:]
+
+    elif args[0] in {'-S', '--Scope'}:
+      if len(args) < 2:
+        print_help()
+      scope = args[1]
+      #Private, Public, LinkOnly or InstructorsOnly
+      args = args[2:]
+
+    else:
+      break
+
+  while len(args) != 0:
+    params = {
+      "filename": filename,
+      "description": description,
+      "scope": scope
+    }
+
+    if args[0] in {'-d', '--description'}:
+      if len(args) < 2:
+        print_help()
+      params['description'] = args[1]
+      args = args[2:]
+
+    if args[0] in {'-s', '--scope'}:
+      if len(args) < 2:
+        print_help()
+      s = args[1]
+      if s[:2] in { 'Pr', 'pr' }:
+        params['scope'] = "Private"
+      elif s[:2] in { 'Pu', 'pu' }:
+        params['scope'] = "Public"
+      elif s[:2] in { 'Li', 'li' }:
+        params['scope'] = "LinkOnly"
+      elif s[:2] in { 'In', 'in' }:
+        params['scope'] = "InstructorsOnly"
+      else:
+        print(f'Scope not valid: {s}')
+        raise SystemExit
+
+      args = args[2:]
+
+    if len(args) == 0:
+      print_help()
+
+    arg = args[0]
+    params['filename'] = arg
+    doc_id = get_file_id(docs,arg)
+    if doc_id is None:
+       doc_id = create_remote_document(params)
+    else:
+       doc = get_doc_by_id(docs,doc_id)
+       if not params['description']:
+         params['description'] = doc['description']
+       if not params['scope']:
+         params['scope'] = doc['scope']
+
+    file = open(arg, 'r')
+    content = file.read()
+    file.close()
+    print(f'Uploading {arg}')
+    update_document(doc_id, params)
+    upload_document(doc_id,content)
+    
+    args = args[1:]
+
 
 
 def assn_documents(docs, assns, args):
@@ -364,7 +462,6 @@ def assn_documents(docs, assns, args):
       break
 
   while len(args) != 0:
-   
     params = {
       "document": None,
       "title": None,
@@ -403,7 +500,7 @@ def assn_documents(docs, assns, args):
       print(f'{params["title"]} not found on server')
     else:
       assn = get_assn_by_title(assns,params['title'])
-      if assn['id']:
+      if assn:
         if not params['description']:
           params['description'] = assn['description']
         if params['pointValue'] is None:
@@ -412,7 +509,6 @@ def assn_documents(docs, assns, args):
           params['availability'] = assn['availability']
         patch_assignment(assn['id'],params)
       else:
-        print(params)
         assign_document(params)
 
     args = args[1:]
@@ -474,6 +570,11 @@ def main(args=sys.argv):
     args = args[1:]
     put_documents(docs, args)
     raise SystemExit
+  elif args[0] in {'nput', 'npush'}:
+    args = args[1:]
+    put_documents_new(docs, args)
+    raise SystemExit
+
   elif args[0] in {'open'}:
     args = args[1:]
     open_documents(docs, args)
