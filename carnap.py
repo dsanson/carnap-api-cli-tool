@@ -52,6 +52,8 @@ import time
 from pathlib import Path
 import yaml
 import webbrowser
+from glob import glob
+
 
 # Load config file
 
@@ -531,8 +533,19 @@ def print_help():
   raise SystemExit()
 
 def main(args=sys.argv):
-  
+ 
   args = args[1:]
+  
+  # expand globs for windows users
+  if os.name == 'nt':
+    expanded_args = []
+    for arg in args:
+      if glob(arg) == []:
+        expanded_args.append(arg)
+      else:
+        expanded_args += glob(arg)
+
+    args = expanded_args
 
   if len(args) == 0 or args[0] in {'-h', '--help', 'help'}:
     print_help()
