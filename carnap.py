@@ -472,29 +472,30 @@ def assn_documents(docs, assns, args):
       "availability": availability, 
     }
 
-    if args[0] in {'-d', '--description'}:
-      if len(args) < 2:
-        print_help()
-      params['description'] = args[1]
-      args = args[2:]
+    while args[0][:1] == '-':
+      if args[0] in {'-d', '--description'}:
+        if len(args) < 2:
+          print_help()
+        params['description'] = args[1]
+        args = args[2:]
 
-    if args[0] in {'-t', '--points'}:
-      if len(args) < 2:
-        print_help()
-      params['pointValue'] = int(args[1])
-      args = args[2:]
+      if args[0] in {'-t', '--points'}:
+        if len(args) < 2:
+          print_help()
+        params['pointValue'] = int(args[1])
+        args = args[2:]
 
-    if args[0] in {'-p', '--password'}:
-      if len(args) < 2:
-        print_help()
-      params['availability'] = {
-        'tag': "HiddenViaPassword",
-        'contents': str(args[1])
-      }
-      args = args[2:]
+      if args[0] in {'-p', '--password'}:
+        if len(args) < 2:
+          print_help()
+        params['availability'] = {
+          'tag': "HiddenViaPassword",
+          'contents': str(args[1])
+        }
+        args = args[2:]
 
-    if len(args) == 0:
-      print_help()
+      if len(args) == 0:
+        print_help()
 
     params['title'] = args[0]
     params['document'] = get_file_id(docs,args[0])
